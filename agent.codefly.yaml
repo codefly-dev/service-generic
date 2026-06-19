@@ -1,0 +1,4 @@
+publisher: codefly.dev
+kind: codefly:service
+name: generic
+version: 0.0.1
