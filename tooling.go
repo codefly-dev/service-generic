@@ -5,13 +5,12 @@ import (
 	"fmt"
 
 	codev0 "github.com/codefly-dev/core/generated/go/codefly/services/code/v0"
-	runtimev0 "github.com/codefly-dev/core/generated/go/codefly/services/runtime/v0"
 	toolingv0 "github.com/codefly-dev/core/generated/go/codefly/services/tooling/v0"
 )
 
 // Tooling implements the Tooling gRPC service for the generic agent.
-// Delegates file/search/edit to Code. LSP and call graph return empty
-// (no language knowledge). Build/test/lint return "not available".
+// Delegates project metadata and edits to Code. Build/test/lint return
+// "not available" because the generic agent has no language toolchain.
 type Tooling struct {
 	toolingv0.UnimplementedToolingServer
 	code    *Code
@@ -76,40 +75,6 @@ func (t *Tooling) ApplyEdit(ctx context.Context, req *toolingv0.ApplyEditRequest
 	}, nil
 }
 
-// ── LSP operations (not available — no language) ───────
-
-func (t *Tooling) ListSymbols(ctx context.Context, req *toolingv0.ListSymbolsRequest) (*toolingv0.ListSymbolsResponse, error) {
-	return &toolingv0.ListSymbolsResponse{}, nil
-}
-
-func (t *Tooling) GetDiagnostics(ctx context.Context, req *toolingv0.GetDiagnosticsRequest) (*toolingv0.GetDiagnosticsResponse, error) {
-	return &toolingv0.GetDiagnosticsResponse{}, nil
-}
-
-func (t *Tooling) GoToDefinition(ctx context.Context, req *toolingv0.GoToDefinitionRequest) (*toolingv0.GoToDefinitionResponse, error) {
-	return &toolingv0.GoToDefinitionResponse{}, nil
-}
-
-func (t *Tooling) FindReferences(ctx context.Context, req *toolingv0.FindReferencesRequest) (*toolingv0.FindReferencesResponse, error) {
-	return &toolingv0.FindReferencesResponse{}, nil
-}
-
-func (t *Tooling) RenameSymbol(ctx context.Context, req *toolingv0.RenameSymbolRequest) (*toolingv0.RenameSymbolResponse, error) {
-	return &toolingv0.RenameSymbolResponse{Success: false, Error: "rename not available: generic agent has no language knowledge"}, nil
-}
-
-func (t *Tooling) GetHoverInfo(ctx context.Context, req *toolingv0.GetHoverInfoRequest) (*toolingv0.GetHoverInfoResponse, error) {
-	return &toolingv0.GetHoverInfoResponse{}, nil
-}
-
-func (t *Tooling) GetCompletions(ctx context.Context, req *toolingv0.GetCompletionsRequest) (*toolingv0.GetCompletionsResponse, error) {
-	return &toolingv0.GetCompletionsResponse{}, nil
-}
-
-func (t *Tooling) GetCallGraph(ctx context.Context, req *toolingv0.GetCallGraphRequest) (*toolingv0.GetCallGraphResponse, error) {
-	return &toolingv0.GetCallGraphResponse{Error: "call graph not available: generic agent has no language knowledge"}, nil
-}
-
 // ── Dependencies (not available — no language) ─────────
 
 func (t *Tooling) ListDependencies(ctx context.Context, _ *toolingv0.ListDependenciesRequest) (*toolingv0.ListDependenciesResponse, error) {
@@ -137,8 +102,3 @@ func (t *Tooling) Test(ctx context.Context, _ *toolingv0.TestRequest) (*toolingv
 func (t *Tooling) Lint(ctx context.Context, _ *toolingv0.LintRequest) (*toolingv0.LintResponse, error) {
 	return &toolingv0.LintResponse{Success: false, Output: "lint not available: generic agent has no language knowledge"}, nil
 }
-
-// ── Unused parameter suppression ───────────────────────
-var (
-	_ = (*runtimev0.RuntimeServer)(nil)
-)
