@@ -32,15 +32,10 @@ func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv0.AgentInfor
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &agentv0.AgentInformation{
-		RuntimeRequirements: []*agentv0.Runtime{},
-		Capabilities: []*agentv0.Capability{
-			{Type: agentv0.Capability_RUNTIME},
-		},
-		Languages:  []*agentv0.Language{},
-		Protocols:  []*agentv0.Protocol{},
-		ReadMe:     readme,
-	}, nil
+	return services.Advertisement{
+		RuntimeOnly: true,
+		ReadMe:      readme,
+	}.Build(), nil
 }
 
 func NewService() *Service {
