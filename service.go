@@ -10,6 +10,7 @@ import (
 	configurations "github.com/codefly-dev/core/resources"
 	"github.com/codefly-dev/core/shared"
 	"github.com/codefly-dev/core/templates"
+	"github.com/codefly-dev/core/toolbox/lang"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -48,11 +49,13 @@ func main() {
 	svc := NewService()
 	code := NewCode(svc)
 	runtime := NewRuntime(svc)
+	tooling := NewTooling(code, runtime)
 	agents.Serve(agents.PluginRegistration{
 		Agent:   svc,
 		Runtime: runtime,
 		Code:    code,
-		Tooling: NewTooling(code, runtime),
+		Tooling: tooling,
+		Toolbox: lang.NewEditToolboxFromTooling(agent.Name, agent.Version, tooling),
 	})
 }
 
