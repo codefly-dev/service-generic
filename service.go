@@ -45,18 +45,26 @@ func NewService() *Service {
 	}
 }
 
-func main() {
+// pluginRegistration wires the generic agent's service surface. It advertises
+// no Builder: the generic agent is a passive, language-agnostic toolbox that
+// emits no Kubernetes manifests, so the manifest-bundle capability is reported
+// as unsupported rather than carrying any manifest or transport responsibility.
+func pluginRegistration() agents.PluginRegistration {
 	svc := NewService()
 	code := NewCode(svc)
 	runtime := NewRuntime(svc)
 	tooling := NewTooling(code, runtime)
-	agents.Serve(agents.PluginRegistration{
+	return agents.PluginRegistration{
 		Agent:   svc,
 		Runtime: runtime,
 		Code:    code,
 		Tooling: tooling,
 		Toolbox: lang.NewEditToolboxFromTooling(agent.Name, agent.Version, tooling),
-	})
+	}
+}
+
+func main() {
+	agents.Serve(pluginRegistration())
 }
 
 //go:embed agent.codefly.yaml
