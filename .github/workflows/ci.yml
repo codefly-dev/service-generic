@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Boundary/conformance check: the generic agent is a manifest- and
+  # transport-neutral producer that emits no Kubernetes output. These checks
+  # run without Git write access, network, kubeconfig, Argo, or cloud
+  # credentials, and enforce that the source grows no repository or reconciler
+  # integration.
+  boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Boundary and conformance tests
+        run: go test ./...
