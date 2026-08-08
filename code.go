@@ -24,8 +24,8 @@ type Code struct {
 
 func NewCode(svc *Service) *Code {
 	return &Code{
-		Service:            svc,
-		DefaultCodeServer:  corecode.NewDefaultCodeServer("."),
+		Service:           svc,
+		DefaultCodeServer: corecode.NewDefaultCodeServer("."),
 	}
 }
 
