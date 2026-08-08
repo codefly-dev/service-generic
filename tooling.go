@@ -36,8 +36,27 @@ func (t *Tooling) GetProjectInfo(ctx context.Context, _ *toolingv0.GetProjectInf
 	if pi == nil {
 		return &toolingv0.GetProjectInfoResponse{Failure: failures.Ensure(resp.GetFailure(), basev0.FailureCode_FAILURE_CODE_INTERNAL, "tooling.get-project-info", "code service returned no project-info result")}, nil
 	}
+	packages := make([]*toolingv0.PackageInfo, 0, len(pi.GetPackages()))
+	for _, pkg := range pi.GetPackages() {
+		packages = append(packages, &toolingv0.PackageInfo{
+			Name: pkg.GetName(), RelativePath: pkg.GetRelativePath(), Files: append([]string(nil), pkg.GetFiles()...),
+			Imports: append([]string(nil), pkg.GetImports()...), Doc: pkg.GetDoc(),
+		})
+	}
+	dependencies := make([]*toolingv0.Dependency, 0, len(pi.GetDependencies()))
+	for _, dependency := range pi.GetDependencies() {
+		dependencies = append(dependencies, &toolingv0.Dependency{
+			Name: dependency.GetName(), Version: dependency.GetVersion(), Direct: dependency.GetDirect(),
+		})
+	}
+	sourceFiles := make([]*toolingv0.SourceFileInfo, 0, len(pi.GetSourceFiles()))
+	for _, file := range pi.GetSourceFiles() {
+		sourceFiles = append(sourceFiles, &toolingv0.SourceFileInfo{Path: file.GetPath(), Imports: append([]string(nil), file.GetImports()...)})
+	}
 	return &toolingv0.GetProjectInfoResponse{
-		Language: "generic", FileHashes: pi.FileHashes, Failure: failures.Clone(resp.GetFailure()),
+		Module: pi.GetModule(), Language: pi.GetLanguage(), LanguageVersion: pi.GetLanguageVersion(),
+		Packages: packages, Dependencies: dependencies, FileHashes: pi.GetFileHashes(), SourceFiles: sourceFiles,
+		Failure: failures.Clone(resp.GetFailure()),
 	}, nil
 }
 
@@ -81,10 +100,26 @@ func (t *Tooling) ApplyEdit(ctx context.Context, req *toolingv0.ApplyEditRequest
 	}, nil
 }
 
-// ── Dependencies (not available — no language) ─────────
+// ── Dependencies (read-only declarative fallback) ─────────
 
 func (t *Tooling) ListDependencies(ctx context.Context, _ *toolingv0.ListDependenciesRequest) (*toolingv0.ListDependenciesResponse, error) {
-	return &toolingv0.ListDependenciesResponse{Failure: unsupportedToolingFailure("tooling.list-dependencies", "dependency listing not available: generic agent")}, nil
+	resp, err := t.code.Execute(ctx, &codev0.CodeRequest{
+		Operation: &codev0.CodeRequest_ListDependencies{ListDependencies: &codev0.ListDependenciesRequest{}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("tooling list_dependencies: %w", err)
+	}
+	listed := resp.GetListDependencies()
+	if listed == nil {
+		return &toolingv0.ListDependenciesResponse{Failure: failures.Ensure(resp.GetFailure(), basev0.FailureCode_FAILURE_CODE_INTERNAL, "tooling.list-dependencies", "code service returned no dependency result")}, nil
+	}
+	dependencies := make([]*toolingv0.Dependency, 0, len(listed.GetDependencies()))
+	for _, dependency := range listed.GetDependencies() {
+		dependencies = append(dependencies, &toolingv0.Dependency{
+			Name: dependency.GetName(), Version: dependency.GetVersion(), Direct: dependency.GetDirect(),
+		})
+	}
+	return &toolingv0.ListDependenciesResponse{Dependencies: dependencies, Failure: failures.Clone(resp.GetFailure())}, nil
 }
 
 func (t *Tooling) AddDependency(ctx context.Context, req *toolingv0.AddDependencyRequest) (*toolingv0.AddDependencyResponse, error) {

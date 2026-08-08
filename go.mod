@@ -5,7 +5,7 @@ go 1.25.12
 toolchain go1.26.4
 
 require (
-	github.com/codefly-dev/core v0.2.72
+	github.com/codefly-dev/core v0.2.75
 	google.golang.org/grpc v1.82.1
 )
 
@@ -84,6 +84,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/shoenig/go-m1cpu v0.2.1 // indirect
 	github.com/skeema/knownhosts v1.3.2 // indirect
+	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect

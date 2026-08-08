@@ -50,8 +50,72 @@ func TestGenericAgentProvidesRealBaselineCodeAndProjectInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get project info: %v", err)
 	}
-	if info.GetFailure() != nil || info.GetLanguage() != "generic" || info.GetFileHashes()["README.txt"] == "" {
-		t.Fatalf("project info = %+v, want generic language and README hash", info)
+	if info.GetFailure().GetCode() != basev0.FailureCode_FAILURE_CODE_UNSUPPORTED_OPERATION || info.GetLanguage() != "unknown" || info.GetFileHashes()["README.txt"] == "" {
+		t.Fatalf("project info = %+v, want typed unsupported semantics plus preserved README hash", info)
+	}
+}
+
+func TestGenericAgentProvidesRealDeclarativeInspectionWithoutClaimingRuntime(t *testing.T) {
+	tests := []struct {
+		name           string
+		files          map[string]string
+		language       string
+		dependencyName string
+		importPath     string
+	}{
+		{
+			name: "jvm",
+			files: map[string]string{
+				"build.gradle": `def grpcVersion = "1.82.1"
+dependencies { implementation "io.grpc:grpc-stub:${grpcVersion}" }
+`,
+				"src/main/java/example/App.java": "package example;\nimport io.grpc.Server;\nclass App {}\n",
+			},
+			language: "jvm", dependencyName: "io.grpc:grpc-stub", importPath: "io.grpc.Server",
+		},
+		{
+			name: "dotnet",
+			files: map[string]string{
+				"cart.sln":                "Microsoft Visual Studio Solution File, Format Version 12.00\n",
+				"src/cart.csproj":         `<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include="Grpc.AspNetCore" Version="2.80.0" /></ItemGroup></Project>`,
+				"src/services/CartSvc.cs": "using Grpc.Core;\nclass CartSvc {}\n",
+			},
+			language: "dotnet", dependencyName: "Grpc.AspNetCore", importPath: "Grpc.Core",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for relative, content := range test.files {
+				filename := filepath.Join(root, filepath.FromSlash(relative))
+				if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			service := NewService()
+			service.sourceLocation = root
+			tooling := NewTooling(NewCode(service), NewRuntime(service))
+			info, err := tooling.GetProjectInfo(t.Context(), &toolingv0.GetProjectInfoRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.GetFailure() != nil || info.GetLanguage() != test.language {
+				t.Fatalf("project info = %+v", info)
+			}
+			if len(info.GetDependencies()) == 0 || info.GetDependencies()[0].GetName() != test.dependencyName {
+				t.Fatalf("dependencies = %+v, want %q", info.GetDependencies(), test.dependencyName)
+			}
+			if len(info.GetSourceFiles()) != 1 || len(info.GetSourceFiles()[0].GetImports()) != 1 || info.GetSourceFiles()[0].GetImports()[0] != test.importPath {
+				t.Fatalf("source files = %+v, want import %q", info.GetSourceFiles(), test.importPath)
+			}
+			listed, err := tooling.ListDependencies(t.Context(), &toolingv0.ListDependenciesRequest{})
+			if err != nil || listed.GetFailure() != nil || len(listed.GetDependencies()) == 0 || listed.GetDependencies()[0].GetName() != test.dependencyName {
+				t.Fatalf("listed dependencies = %+v, err=%v", listed, err)
+			}
+		})
 	}
 }
 
@@ -121,7 +185,7 @@ func TestGenericRuntimeTestReportsCompleteUnsupportedResult(t *testing.T) {
 func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing.T) {
 	workspace := t.TempDir()
 	serviceDir := filepath.Join(workspace, "services", "source")
-	sourceDir := filepath.Join(serviceDir, "code")
+	sourceDir := t.TempDir()
 	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -137,6 +201,9 @@ func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing
 	if err := service.Save(t.Context()); err != nil {
 		t.Fatalf("save real service declaration: %v", err)
 	}
+	if err := os.Symlink(sourceDir, filepath.Join(serviceDir, "code")); err != nil {
+		t.Fatalf("link attached source: %v", err)
+	}
 	environment, err := resources.LocalEnvironment().Proto()
 	if err != nil {
 		t.Fatalf("local environment: %v", err)
@@ -144,6 +211,15 @@ func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing
 	t.Setenv("CODEFLY_AGENT_WORKDIR", serviceDir)
 
 	svc := NewService()
+	code := NewCode(svc)
+	// The production agent manager performs a Code health check before Runtime
+	// Load resolves the attached source. Exercise that order so the pre-load
+	// server cannot pin subsequent operations to the agent process directory.
+	if _, err := code.Execute(t.Context(), &codev0.CodeRequest{
+		Operation: &codev0.CodeRequest_GetProjectInfo{GetProjectInfo: &codev0.GetProjectInfoRequest{}},
+	}); err != nil {
+		t.Fatalf("pre-load code check: %v", err)
+	}
 	runtime := NewRuntime(svc)
 	response, err := runtime.Load(t.Context(), &runtimev0.LoadRequest{
 		Identity: &basev0.ServiceIdentity{
@@ -158,10 +234,14 @@ func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing
 	if response.GetStatus().GetState() != runtimev0.LoadStatus_READY {
 		t.Fatalf("runtime load status = %+v, want READY", response.GetStatus())
 	}
-	if svc.sourceLocation != sourceDir {
-		t.Fatalf("source location = %q, want %q", svc.sourceLocation, sourceDir)
+	physicalSource, err := filepath.EvalSymlinks(sourceDir)
+	if err != nil {
+		t.Fatalf("resolve physical source: %v", err)
 	}
-	read, err := NewCode(svc).Execute(t.Context(), &codev0.CodeRequest{
+	if svc.sourceLocation != physicalSource {
+		t.Fatalf("source location = %q, want %q", svc.sourceLocation, physicalSource)
+	}
+	read, err := code.Execute(t.Context(), &codev0.CodeRequest{
 		Operation: &codev0.CodeRequest_ReadFile{ReadFile: &codev0.ReadFileRequest{Path: "README.txt"}},
 	})
 	if err != nil {
