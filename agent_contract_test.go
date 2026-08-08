@@ -93,6 +93,31 @@ func TestGenericRuntimeReportsUnsupportedDevCapabilities(t *testing.T) {
 	}
 }
 
+func TestGenericRuntimeTestReportsCompleteUnsupportedResult(t *testing.T) {
+	runtime := NewRuntime(NewService())
+	response, err := runtime.Test(t.Context(), &runtimev0.TestRequest{})
+	if err != nil {
+		t.Fatalf("test transport error: %v", err)
+	}
+	status := response.GetStatus()
+	result := response.GetResult()
+	if status.GetState() != runtimev0.TestStatus_ERROR {
+		t.Fatalf("status state = %v, want ERROR", status.GetState())
+	}
+	if result.GetState() != runtimev0.TestRunResult_ERRORED {
+		t.Fatalf("result state = %v, want ERRORED", result.GetState())
+	}
+	if result.GetMessage() == "" || result.GetMessage() != status.GetMessage() {
+		t.Fatalf("result message = %q, want status message %q", result.GetMessage(), status.GetMessage())
+	}
+	if result.GetFailure().GetCode() != basev0.FailureCode_FAILURE_CODE_UNSUPPORTED_OPERATION {
+		t.Fatalf("result failure = %+v, want typed unsupported operation", result.GetFailure())
+	}
+	if result.GetFailure().GetOperation() != status.GetFailure().GetOperation() {
+		t.Fatalf("result failure operation = %q, want status operation %q", result.GetFailure().GetOperation(), status.GetFailure().GetOperation())
+	}
+}
+
 func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing.T) {
 	workspace := t.TempDir()
 	serviceDir := filepath.Join(workspace, "services", "source")

@@ -76,10 +76,15 @@ func (s *Runtime) Build(context.Context, *runtimev0.BuildRequest) (*runtimev0.Bu
 // for an unknown language or framework.
 func (s *Runtime) Test(context.Context, *runtimev0.TestRequest) (*runtimev0.TestResponse, error) {
 	message := "test not available: generic agent has no language knowledge"
+	failure := unsupportedRuntimeFailure("runtime.test", message)
 	return &runtimev0.TestResponse{Status: &runtimev0.TestStatus{
 		State:   runtimev0.TestStatus_ERROR,
 		Message: message,
-		Failure: unsupportedRuntimeFailure("runtime.test", message),
+		Failure: failure,
+	}, Result: &runtimev0.TestRunResult{
+		State:   runtimev0.TestRunResult_ERRORED,
+		Message: message,
+		Failure: failure,
 	}}, nil
 }
 
