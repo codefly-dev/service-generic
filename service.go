@@ -65,14 +65,29 @@ func (s *Service) ResolveSourceLocation() string {
 	if workDir := os.Getenv("CODEFLY_AGENT_WORKDIR"); workDir != "" {
 		root = workDir
 	}
+	location := root
 	if s.Settings == nil || strings.TrimSpace(s.Settings.SourceDir) == "" {
-		return root
+		return resolveAttachedSource(root)
 	}
 	sourceDir := filepath.FromSlash(strings.TrimSpace(s.Settings.SourceDir))
 	if filepath.IsAbs(sourceDir) {
-		return filepath.Clean(sourceDir)
+		location = filepath.Clean(sourceDir)
+	} else {
+		location = filepath.Join(root, sourceDir)
 	}
-	return filepath.Join(root, sourceDir)
+	return resolveAttachedSource(location)
+}
+
+// resolveAttachedSource follows the ephemeral source-workspace symlink before
+// CachedVFS inventories it. filepath.WalkDir intentionally does not descend
+// through a symlink passed as its root, so retaining the generated link would
+// make a valid attachment appear empty after a successful Runtime Load.
+func resolveAttachedSource(location string) string {
+	location = filepath.Clean(location)
+	if physical, err := filepath.EvalSymlinks(location); err == nil {
+		return physical
+	}
+	return location
 }
 
 // pluginRegistration wires the generic agent's service surface. It advertises
