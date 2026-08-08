@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"embed"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/codefly-dev/core/agents"
 	"github.com/codefly-dev/core/agents/services"
@@ -18,10 +21,17 @@ import (
 
 var agent = shared.Must(configurations.LoadFromFs[configurations.Agent](shared.Embed(infoFS)))
 
+// Settings contains only the language-neutral source attachment contract.
+// The generic agent deliberately carries no build, test, or lint settings.
+type Settings struct {
+	SourceDir string `yaml:"source-dir"`
+}
+
 // Service is the generic codefly agent. Language-agnostic: provides baseline
 // filesystem, git, and search operations for ANY repository.
 type Service struct {
 	*services.Base
+	Settings       *Settings
 	sourceLocation string
 }
 
@@ -41,8 +51,28 @@ func (s *Service) GetAgentInformation(ctx context.Context, _ *agentv0.AgentInfor
 
 func NewService() *Service {
 	return &Service{
-		Base: services.NewServiceBase(context.Background(), agent),
+		Base:     services.NewServiceBase(context.Background(), agent),
+		Settings: &Settings{},
 	}
+}
+
+// ResolveSourceLocation binds generic Code and Tooling operations to the
+// source directory declared by the service adapter. CODEFLY_AGENT_WORKDIR is
+// the generated service root for attached arbitrary-source sessions; the
+// language-neutral source-dir setting selects its project attachment.
+func (s *Service) ResolveSourceLocation() string {
+	root := s.Location
+	if workDir := os.Getenv("CODEFLY_AGENT_WORKDIR"); workDir != "" {
+		root = workDir
+	}
+	if s.Settings == nil || strings.TrimSpace(s.Settings.SourceDir) == "" {
+		return root
+	}
+	sourceDir := filepath.FromSlash(strings.TrimSpace(s.Settings.SourceDir))
+	if filepath.IsAbs(sourceDir) {
+		return filepath.Clean(sourceDir)
+	}
+	return filepath.Join(root, sourceDir)
 }
 
 // pluginRegistration wires the generic agent's service surface. It advertises

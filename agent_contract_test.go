@@ -12,6 +12,7 @@ import (
 	codev0 "github.com/codefly-dev/core/generated/go/codefly/services/code/v0"
 	runtimev0 "github.com/codefly-dev/core/generated/go/codefly/services/runtime/v0"
 	toolingv0 "github.com/codefly-dev/core/generated/go/codefly/services/tooling/v0"
+	"github.com/codefly-dev/core/resources"
 )
 
 func TestGenericAgentInformationLoadsEmbeddedCapabilityGuide(t *testing.T) {
@@ -89,5 +90,59 @@ func TestGenericRuntimeReportsUnsupportedDevCapabilities(t *testing.T) {
 				t.Fatalf("failure = %+v, want typed unsupported operation", failure)
 			}
 		})
+	}
+}
+
+func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing.T) {
+	workspace := t.TempDir()
+	serviceDir := filepath.Join(workspace, "services", "source")
+	sourceDir := filepath.Join(serviceDir, "code")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const content = "attached generic source\n"
+	if err := os.WriteFile(filepath.Join(sourceDir, "README.txt"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service := &resources.Service{
+		Name: "source", Version: "0.0.0", Agent: agent,
+		Spec: map[string]any{"source-dir": "code"},
+	}
+	service.WithDir(serviceDir)
+	if err := service.Save(t.Context()); err != nil {
+		t.Fatalf("save real service declaration: %v", err)
+	}
+	environment, err := resources.LocalEnvironment().Proto()
+	if err != nil {
+		t.Fatalf("local environment: %v", err)
+	}
+	t.Setenv("CODEFLY_AGENT_WORKDIR", serviceDir)
+
+	svc := NewService()
+	runtime := NewRuntime(svc)
+	response, err := runtime.Load(t.Context(), &runtimev0.LoadRequest{
+		Identity: &basev0.ServiceIdentity{
+			Name: "source", Module: "source-workspace", Workspace: "source-workspace", WorkspacePath: workspace,
+			RelativeToWorkspace: "services/source",
+		},
+		Environment: environment,
+	})
+	if err != nil {
+		t.Fatalf("runtime load transport error: %v", err)
+	}
+	if response.GetStatus().GetState() != runtimev0.LoadStatus_READY {
+		t.Fatalf("runtime load status = %+v, want READY", response.GetStatus())
+	}
+	if svc.sourceLocation != sourceDir {
+		t.Fatalf("source location = %q, want %q", svc.sourceLocation, sourceDir)
+	}
+	read, err := NewCode(svc).Execute(t.Context(), &codev0.CodeRequest{
+		Operation: &codev0.CodeRequest_ReadFile{ReadFile: &codev0.ReadFileRequest{Path: "README.txt"}},
+	})
+	if err != nil {
+		t.Fatalf("read attached source: %v", err)
+	}
+	if got := read.GetReadFile(); got == nil || got.GetContent() != content {
+		t.Fatalf("read response = %+v, want attached source content", read)
 	}
 }
