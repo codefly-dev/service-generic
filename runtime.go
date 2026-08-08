@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 
 	"github.com/codefly-dev/core/agents/services"
 	"github.com/codefly-dev/core/failures"
@@ -22,27 +21,12 @@ func NewRuntime(svc *Service) *Runtime {
 }
 
 func (s *Runtime) Load(ctx context.Context, req *runtimev0.LoadRequest) (*runtimev0.LoadResponse, error) {
-	err := s.Base.Load(ctx, req.Identity, nil)
-	if err != nil {
-		return s.Runtime.LoadErrorf(err, "loading base")
-	}
-
 	defer s.Wool.Catch()
-
-	if req.DisableCatch {
-		s.Wool.DisableCatch()
+	response, err := s.Runtime.LoadService(ctx, req, services.RuntimeLoad{Settings: s.Settings})
+	if err == nil && response.GetStatus().GetState() == runtimev0.LoadStatus_READY {
+		s.sourceLocation = s.ResolveSourceLocation()
 	}
-
-	s.Runtime.SetEnvironment(req.Environment)
-
-	// Resolve source location: prefer CODEFLY_AGENT_WORKDIR, fall back to service location.
-	if wd := os.Getenv("CODEFLY_AGENT_WORKDIR"); wd != "" {
-		s.sourceLocation = wd
-	} else {
-		s.sourceLocation = s.Location
-	}
-
-	return s.Runtime.LoadResponse()
+	return response, err
 }
 
 func (s *Runtime) Init(ctx context.Context, req *runtimev0.InitRequest) (*runtimev0.InitResponse, error) {
