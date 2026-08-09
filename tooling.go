@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	corecode "github.com/codefly-dev/core/code"
 	"github.com/codefly-dev/core/failures"
 	basev0 "github.com/codefly-dev/core/generated/go/codefly/base/v0"
 	codev0 "github.com/codefly-dev/core/generated/go/codefly/services/code/v0"
@@ -58,6 +59,14 @@ func (t *Tooling) GetProjectInfo(ctx context.Context, _ *toolingv0.GetProjectInf
 		Packages: packages, Dependencies: dependencies, FileHashes: pi.GetFileHashes(), SourceFiles: sourceFiles,
 		Failure: failures.Clone(resp.GetFailure()),
 	}, nil
+}
+
+// GetSemanticIndex delegates the complete read-only projection to Core's Code
+// implementation. Generic is the production fallback for JVM, .NET, and any
+// unsupported structural unit, so it must return typed coverage rather than
+// forcing a brain to inspect project source.
+func (t *Tooling) GetSemanticIndex(ctx context.Context, req *toolingv0.GetSemanticIndexRequest) (*toolingv0.GetSemanticIndexResponse, error) {
+	return corecode.NewSourceTooling(t.code).GetSemanticIndex(ctx, req)
 }
 
 func (t *Tooling) Fix(ctx context.Context, req *toolingv0.FixRequest) (*toolingv0.FixResponse, error) {

@@ -20,9 +20,9 @@ import (
 // Search, GitLog, GitDiff, GitShow, GitBlame, ApplyEdit, GetProjectInfo,
 // and read-only declarative dependency inspection.
 //
-// LSP operations return "not available" (DefaultCodeServer stubs).
-// Call graph and symbols return typed unsupported results. Runtime build/test/
-// lint remain unsupported even when declarative inspection succeeds.
+// Semantic projection is supplied by Core and exposed through Tooling; project
+// bytes never leave the agent. Runtime build/test/lint remain unsupported even
+// when declarative and semantic inspection succeed.
 type Code struct {
 	*corecode.DefaultCodeServer
 	*Service
