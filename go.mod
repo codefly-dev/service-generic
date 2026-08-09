@@ -5,7 +5,7 @@ go 1.25.12
 toolchain go1.26.4
 
 require (
-	github.com/codefly-dev/core v0.2.81
+	github.com/codefly-dev/core v0.2.82
 	google.golang.org/grpc v1.82.1
 )
 
