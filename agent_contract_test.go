@@ -115,6 +115,16 @@ dependencies { implementation "io.grpc:grpc-stub:${grpcVersion}" }
 			if err != nil || listed.GetFailure() != nil || len(listed.GetDependencies()) == 0 || listed.GetDependencies()[0].GetName() != test.dependencyName {
 				t.Fatalf("listed dependencies = %+v, err=%v", listed, err)
 			}
+			semantic, err := tooling.GetSemanticIndex(t.Context(), &toolingv0.GetSemanticIndexRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if semantic.GetFailure() != nil || semantic.GetIndex().GetState() != basev0.SemanticIndexState_SEMANTIC_INDEX_STATE_COMPLETE || len(semantic.GetIndex().GetFiles()) != 1 || len(semantic.GetIndex().GetSymbols()) == 0 {
+				t.Fatalf("semantic index = %+v", semantic)
+			}
+			if semantic.GetIndex().GetFiles()[0].GetPath() != info.GetSourceFiles()[0].GetPath() {
+				t.Fatalf("semantic path %q != project-info path %q", semantic.GetIndex().GetFiles()[0].GetPath(), info.GetSourceFiles()[0].GetPath())
+			}
 		})
 	}
 }
