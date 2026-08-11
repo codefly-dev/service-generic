@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/codefly-dev/core/agents"
 	"github.com/codefly-dev/core/agents/services"
@@ -32,6 +34,7 @@ type Settings struct {
 type Service struct {
 	*services.Base
 	Settings       *Settings
+	sourceMu       sync.Mutex
 	sourceLocation string
 }
 
@@ -56,11 +59,11 @@ func NewService() *Service {
 	}
 }
 
-// ResolveSourceLocation binds generic Code and Tooling operations to the
+// resolveSourceLocation binds generic Code and Tooling operations to the
 // source directory declared by the service adapter. CODEFLY_AGENT_WORKDIR is
 // the generated service root for attached arbitrary-source sessions; the
 // language-neutral source-dir setting selects its project attachment.
-func (s *Service) ResolveSourceLocation() string {
+func (s *Service) resolveSourceLocation() string {
 	root := s.Location
 	if workDir := os.Getenv("CODEFLY_AGENT_WORKDIR"); workDir != "" {
 		root = workDir
@@ -76,6 +79,34 @@ func (s *Service) ResolveSourceLocation() string {
 		location = filepath.Join(root, sourceDir)
 	}
 	return resolveAttachedSource(location)
+}
+
+// sourceLocationForCode resolves the attached source before Runtime.Load so
+// read-only Code and Tooling capabilities do not depend on a project runtime.
+// The generated service declaration remains the single settings authority: the
+// agent uses Core's production resource loader instead of parsing or copying
+// the source-dir contract.
+func (s *Service) sourceLocationForCode(ctx context.Context) (string, error) {
+	s.sourceMu.Lock()
+	defer s.sourceMu.Unlock()
+	if s.sourceLocation != "" {
+		return s.sourceLocation, nil
+	}
+	workDir := strings.TrimSpace(os.Getenv("CODEFLY_AGENT_WORKDIR"))
+	if workDir == "" {
+		return s.resolveSourceLocation(), nil
+	}
+	declaration, err := configurations.LoadServiceFromDir(ctx, workDir)
+	if err != nil {
+		return "", fmt.Errorf("load attached source declaration: %w", err)
+	}
+	settings := &Settings{}
+	if err := declaration.LoadSettingsFromSpec(settings); err != nil {
+		return "", fmt.Errorf("load attached source settings: %w", err)
+	}
+	s.Settings = settings
+	s.sourceLocation = s.resolveSourceLocation()
+	return s.sourceLocation, nil
 }
 
 // resolveAttachedSource follows the ephemeral source-workspace symlink before

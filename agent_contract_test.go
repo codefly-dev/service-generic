@@ -222,13 +222,23 @@ func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing
 
 	svc := NewService()
 	code := NewCode(svc)
-	// The production agent manager performs a Code health check before Runtime
-	// Load resolves the attached source. Exercise that order so the pre-load
-	// server cannot pin subsequent operations to the agent process directory.
-	if _, err := code.Execute(t.Context(), &codev0.CodeRequest{
-		Operation: &codev0.CodeRequest_GetProjectInfo{GetProjectInfo: &codev0.GetProjectInfoRequest{}},
-	}); err != nil {
-		t.Fatalf("pre-load code check: %v", err)
+	// Read-only Code runs before Runtime.Load in the production lazy-runtime
+	// path. It must resolve the real service declaration and attached source on
+	// that first request, without pinning the generated service directory.
+	read, err := code.Execute(t.Context(), &codev0.CodeRequest{
+		Operation: &codev0.CodeRequest_ReadFile{ReadFile: &codev0.ReadFileRequest{Path: "README.txt"}},
+	})
+	if err != nil {
+		t.Fatalf("pre-load attached source read: %v", err)
+	} else if got := read.GetReadFile(); got == nil || got.GetContent() != content {
+		t.Fatalf("pre-load read response = %+v, want attached source content", read)
+	}
+	physicalSource, err := filepath.EvalSymlinks(sourceDir)
+	if err != nil {
+		t.Fatalf("resolve physical source: %v", err)
+	}
+	if svc.sourceLocation != physicalSource {
+		t.Fatalf("pre-load source location = %q, want %q", svc.sourceLocation, physicalSource)
 	}
 	runtime := NewRuntime(svc)
 	response, err := runtime.Load(t.Context(), &runtimev0.LoadRequest{
@@ -244,14 +254,10 @@ func TestGenericRuntimeLoadsAttachedSourceThroughRealServiceLifecycle(t *testing
 	if response.GetStatus().GetState() != runtimev0.LoadStatus_READY {
 		t.Fatalf("runtime load status = %+v, want READY", response.GetStatus())
 	}
-	physicalSource, err := filepath.EvalSymlinks(sourceDir)
-	if err != nil {
-		t.Fatalf("resolve physical source: %v", err)
-	}
 	if svc.sourceLocation != physicalSource {
 		t.Fatalf("source location = %q, want %q", svc.sourceLocation, physicalSource)
 	}
-	read, err := code.Execute(t.Context(), &codev0.CodeRequest{
+	read, err = code.Execute(t.Context(), &codev0.CodeRequest{
 		Operation: &codev0.CodeRequest_ReadFile{ReadFile: &codev0.ReadFileRequest{Path: "README.txt"}},
 	})
 	if err != nil {

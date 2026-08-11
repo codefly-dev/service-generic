@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"sync"
 
@@ -39,10 +38,14 @@ func NewCode(svc *Service) *Code {
 
 // InitServer creates the DefaultCodeServer once sourceDir is resolved.
 // Uses CachedVFS for in-memory file tree caching with fsnotify updates.
-func (c *Code) InitServer() {
-	source := filepath.Clean(c.sourceDir())
+func (c *Code) InitServer(ctx context.Context) error {
+	source, err := c.sourceLocationForCode(ctx)
+	if err != nil {
+		return err
+	}
+	source = filepath.Clean(source)
 	if c.DefaultCodeServer != nil && c.initializedSource == source {
-		return
+		return nil
 	}
 	previous := c.DefaultCodeServer
 	c.Wool.Debug("binding generic Code source", wool.DirField(source))
@@ -51,25 +54,14 @@ func (c *Code) InitServer() {
 	if previous != nil {
 		_ = previous.Close()
 	}
-}
-
-func (c *Code) ensureInit() {
-	c.InitServer()
-}
-
-func (c *Code) sourceDir() string {
-	if c.sourceLocation != "" {
-		return c.sourceLocation
-	}
-	if wd := os.Getenv("CODEFLY_AGENT_WORKDIR"); wd != "" {
-		return wd
-	}
-	return c.Location
+	return nil
 }
 
 func (c *Code) Execute(ctx context.Context, req *codev0.CodeRequest) (*codev0.CodeResponse, error) {
 	c.serverMu.Lock()
 	defer c.serverMu.Unlock()
-	c.ensureInit()
+	if err := c.InitServer(ctx); err != nil {
+		return nil, err
+	}
 	return c.DefaultCodeServer.Execute(ctx, req)
 }
