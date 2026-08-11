@@ -22,9 +22,11 @@ func NewRuntime(svc *Service) *Runtime {
 
 func (s *Runtime) Load(ctx context.Context, req *runtimev0.LoadRequest) (*runtimev0.LoadResponse, error) {
 	defer s.Wool.Catch()
+	s.sourceMu.Lock()
+	defer s.sourceMu.Unlock()
 	response, err := s.Runtime.LoadService(ctx, req, services.RuntimeLoad{Settings: s.Settings})
 	if err == nil && response.GetStatus().GetState() == runtimev0.LoadStatus_READY {
-		s.sourceLocation = s.ResolveSourceLocation()
+		s.sourceLocation = s.resolveSourceLocation()
 	}
 	return response, err
 }
