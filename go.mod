@@ -2,10 +2,10 @@ module github.com/codefly-dev/service-generic
 
 go 1.25.12
 
-toolchain go1.26.4
+toolchain go1.26.6
 
 require (
-	github.com/codefly-dev/core v0.2.102
+	github.com/codefly-dev/core v0.2.121
 	google.golang.org/grpc v1.82.1
 )
 
