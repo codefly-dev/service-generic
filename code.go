@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	corecode "github.com/codefly-dev/core/code"
+	"github.com/codefly-dev/core/code/semantic"
 	codev0 "github.com/codefly-dev/core/generated/go/codefly/services/code/v0"
 	"github.com/codefly-dev/core/wool"
 )
@@ -22,6 +23,10 @@ import (
 // Semantic projection is supplied by Core and exposed through Tooling; project
 // bytes never leave the agent. Runtime build/test/lint remain unsupported even
 // when declarative and semantic inspection succeed.
+//
+// Core omits the tree-sitter analyzer by default so Go agents stay CGO-free, so
+// the generic agent installs it explicitly — JVM/.NET inspection and semantic
+// projection are part of its contract, and it already builds with CGO_ENABLED=1.
 type Code struct {
 	*corecode.DefaultCodeServer
 	*Service
@@ -32,7 +37,7 @@ type Code struct {
 func NewCode(svc *Service) *Code {
 	return &Code{
 		Service:           svc,
-		DefaultCodeServer: corecode.NewDefaultCodeServer("."),
+		DefaultCodeServer: corecode.NewDefaultCodeServer(".", corecode.WithSemanticAnalyzer(semantic.New())),
 	}
 }
 
@@ -49,7 +54,7 @@ func (c *Code) InitServer(ctx context.Context) error {
 	}
 	previous := c.DefaultCodeServer
 	c.Wool.Debug("binding generic Code source", wool.DirField(source))
-	c.DefaultCodeServer = corecode.NewDefaultCodeServer(source, corecode.WithCachedFS())
+	c.DefaultCodeServer = corecode.NewDefaultCodeServer(source, corecode.WithCachedFS(), corecode.WithSemanticAnalyzer(semantic.New()))
 	c.initializedSource = source
 	if previous != nil {
 		_ = previous.Close()
