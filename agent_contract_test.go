@@ -55,13 +55,16 @@ func TestGenericAgentProvidesRealBaselineCodeAndProjectInfo(t *testing.T) {
 	}
 }
 
-func TestGenericAgentProvidesRealDeclarativeInspectionWithoutClaimingRuntime(t *testing.T) {
+// The generic agent ships without the tree-sitter CGO stack, so source-semantics
+// inspection (dependency, import, and symbol extraction) is reported as a typed
+// unsupported operation. Language classification and file hashes stay available
+// because they are declarative and need no analyzer.
+func TestGenericAgentReportsSourceSemanticsUnsupportedWithoutAnalyzer(t *testing.T) {
 	tests := []struct {
-		name           string
-		files          map[string]string
-		language       string
-		dependencyName string
-		importPath     string
+		name     string
+		files    map[string]string
+		manifest string
+		language string
 	}{
 		{
 			name: "jvm",
@@ -71,7 +74,7 @@ dependencies { implementation "io.grpc:grpc-stub:${grpcVersion}" }
 `,
 				"src/main/java/example/App.java": "package example;\nimport io.grpc.Server;\nclass App {}\n",
 			},
-			language: "jvm", dependencyName: "io.grpc:grpc-stub", importPath: "io.grpc.Server",
+			manifest: "build.gradle", language: "jvm",
 		},
 		{
 			name: "dotnet",
@@ -80,7 +83,7 @@ dependencies { implementation "io.grpc:grpc-stub:${grpcVersion}" }
 				"src/cart.csproj":         `<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include="Grpc.AspNetCore" Version="2.80.0" /></ItemGroup></Project>`,
 				"src/services/CartSvc.cs": "using Grpc.Core;\nclass CartSvc {}\n",
 			},
-			language: "dotnet", dependencyName: "Grpc.AspNetCore", importPath: "Grpc.Core",
+			manifest: "cart.sln", language: "dotnet",
 		},
 	}
 	for _, test := range tests {
@@ -98,32 +101,33 @@ dependencies { implementation "io.grpc:grpc-stub:${grpcVersion}" }
 			service := NewService()
 			service.sourceLocation = root
 			tooling := NewTooling(NewCode(service), NewRuntime(service))
+
 			info, err := tooling.GetProjectInfo(t.Context(), &toolingv0.GetProjectInfoRequest{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if info.GetFailure() != nil || info.GetLanguage() != test.language {
-				t.Fatalf("project info = %+v", info)
+			if info.GetFailure().GetCode() != basev0.FailureCode_FAILURE_CODE_UNSUPPORTED_OPERATION {
+				t.Fatalf("project info failure = %+v, want typed unsupported operation", info.GetFailure())
 			}
-			if len(info.GetDependencies()) == 0 || info.GetDependencies()[0].GetName() != test.dependencyName {
-				t.Fatalf("dependencies = %+v, want %q", info.GetDependencies(), test.dependencyName)
+			if info.GetLanguage() != test.language {
+				t.Fatalf("project info language = %q, want %q", info.GetLanguage(), test.language)
 			}
-			if len(info.GetSourceFiles()) != 1 || len(info.GetSourceFiles()[0].GetImports()) != 1 || info.GetSourceFiles()[0].GetImports()[0] != test.importPath {
-				t.Fatalf("source files = %+v, want import %q", info.GetSourceFiles(), test.importPath)
+			if info.GetFileHashes()[test.manifest] == "" {
+				t.Fatalf("project info file hashes = %+v, want preserved hash for %q", info.GetFileHashes(), test.manifest)
 			}
-			listed, err := tooling.ListDependencies(t.Context(), &toolingv0.ListDependenciesRequest{})
-			if err != nil || listed.GetFailure() != nil || len(listed.GetDependencies()) == 0 || listed.GetDependencies()[0].GetName() != test.dependencyName {
-				t.Fatalf("listed dependencies = %+v, err=%v", listed, err)
+			if len(info.GetDependencies()) != 0 || len(info.GetSourceFiles()) != 0 {
+				t.Fatalf("project info = %+v, want no analyzer-derived dependencies or imports", info)
 			}
+
 			semantic, err := tooling.GetSemanticIndex(t.Context(), &toolingv0.GetSemanticIndexRequest{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if semantic.GetFailure() != nil || semantic.GetIndex().GetState() != basev0.SemanticIndexState_SEMANTIC_INDEX_STATE_COMPLETE || len(semantic.GetIndex().GetFiles()) != 1 || len(semantic.GetIndex().GetSymbols()) == 0 {
-				t.Fatalf("semantic index = %+v", semantic)
+			if semantic.GetFailure().GetCode() != basev0.FailureCode_FAILURE_CODE_UNSUPPORTED_OPERATION {
+				t.Fatalf("semantic index failure = %+v, want typed unsupported operation", semantic.GetFailure())
 			}
-			if semantic.GetIndex().GetFiles()[0].GetPath() != info.GetSourceFiles()[0].GetPath() {
-				t.Fatalf("semantic path %q != project-info path %q", semantic.GetIndex().GetFiles()[0].GetPath(), info.GetSourceFiles()[0].GetPath())
+			if semantic.GetIndex().GetState() != basev0.SemanticIndexState_SEMANTIC_INDEX_STATE_NOT_ATTEMPTED {
+				t.Fatalf("semantic index state = %v, want NOT_ATTEMPTED", semantic.GetIndex().GetState())
 			}
 		})
 	}

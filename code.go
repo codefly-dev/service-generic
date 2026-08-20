@@ -12,16 +12,16 @@ import (
 
 // Code implements the codefly Code gRPC service for the generic agent.
 // It embeds DefaultCodeServer directly — NO runtime or mutation overrides.
-// Core's declarative project-info fallback may inspect JVM/.NET manifests and
-// source imports, but it never executes a native build tool.
+// No semantic analyzer is installed, so the agent stays free of the
+// tree-sitter CGO stack and builds with CGO_ENABLED=0.
 //
 // Provides: ReadFile, WriteFile, CreateFile, DeleteFile, MoveFile, ListFiles,
-// Search, GitLog, GitDiff, GitShow, GitBlame, ApplyEdit, GetProjectInfo,
-// and read-only declarative dependency inspection.
+// Search, GitLog, GitDiff, GitShow, GitBlame, ApplyEdit, GetProjectInfo
+// (declarative language classification and file hashes only).
 //
-// Semantic projection is supplied by Core and exposed through Tooling; project
-// bytes never leave the agent. Runtime build/test/lint remain unsupported even
-// when declarative and semantic inspection succeed.
+// Source-semantics inspection — dependency, import, and symbol extraction, plus
+// the semantic index — reports a typed unsupported operation because it would
+// require the CGO analyzer. Runtime build/test/lint remain unsupported too.
 type Code struct {
 	*corecode.DefaultCodeServer
 	*Service
