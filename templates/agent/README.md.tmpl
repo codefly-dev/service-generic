@@ -20,3 +20,16 @@ Language-agnostic codefly agent providing baseline filesystem, git, and search o
 
 This agent is the **fallback** when no language-specific agent (Go, Python, etc.) is available.
 Every language-specific agent inherits all of these operations automatically.
+
+## Container images and SBOM evidence
+
+This agent produces **no runtime image**. It is a passive toolbox: it registers
+no Builder and advertises no BUILDER capability, so it emits no runtime, init,
+migration, or sidecar image for a scanner to inventory.
+
+Under the shared Codefly SBOM contract that status is `NO_IMAGE` — a service
+that legitimately ships nothing to scan — and it is deliberately distinct from
+an agent whose image SBOM support is simply unimplemented. Image evidence for a
+workload built by a consuming language agent belongs to that agent, which binds
+it to the digest and platform it actually built; the generic toolbox never
+reports image coverage on another agent's behalf.
