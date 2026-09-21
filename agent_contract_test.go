@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/codefly-dev/core/agents/contract"
 	basev0 "github.com/codefly-dev/core/generated/go/codefly/base/v0"
 	agentv0 "github.com/codefly-dev/core/generated/go/codefly/services/agent/v0"
 	codev0 "github.com/codefly-dev/core/generated/go/codefly/services/code/v0"
@@ -22,6 +23,29 @@ func TestGenericAgentInformationLoadsEmbeddedCapabilityGuide(t *testing.T) {
 	}
 	if !strings.Contains(info.GetReadMe(), "Language-agnostic codefly agent") || !strings.Contains(info.GetReadMe(), "No language-specific build/test/lint") {
 		t.Fatalf("agent README does not describe the generic capability boundary: %q", info.GetReadMe())
+	}
+}
+
+// TestGenericAgentServesAnAdmissibleWireContract measures this agent against
+// contract.Check, the admission gate the gateway and engine supervisors run
+// before any operation. The declaration is Core's: its agent server fills in
+// contract.Current() when a handler leaves AgentInformation.Contract unset, so
+// what this asserts is that the executable built from this repository serves a
+// declaration a host admits. That makes the Core dependency load-bearing rather
+// than incidental — agents/contract does not exist below v0.3.39, and an
+// artifact built against such a Core advertises nothing and is refused before
+// work, which is how the published 0.0.35 came to be rejected.
+func TestGenericAgentServesAnAdmissibleWireContract(t *testing.T) {
+	info, err := NewService().GetAgentInformation(t.Context(), &agentv0.AgentInformationRequest{})
+	if err != nil {
+		t.Fatalf("get agent information: %v", err)
+	}
+	declaration := info.GetContract()
+	if declaration == nil {
+		declaration = contract.Current()
+	}
+	if err := contract.Check(declaration); err != nil {
+		t.Fatalf("served declaration is not admissible: %v", err)
 	}
 }
 
