@@ -28,15 +28,18 @@ func declaredImageSBOM(t *testing.T) *builderv0.SBOMResponse {
 }
 
 // fabricatedImageEvidence is the shape a false "everything is covered" answer
-// takes: inventories that look complete for an image this agent never builds.
+// takes: an inventory that looks complete for an image this agent never builds
+// and that belongs to another service entirely. Evidence an agent enumerates
+// under its own name is real coverage the shared contract validates, so what
+// makes this claim dishonest is the subject naming someone else's image.
 func fabricatedImageEvidence() []*builderv0.ImageSBOM {
 	return []*builderv0.ImageSBOM{{
 		Digest:   "sha256:" + strings.Repeat("a", 64),
 		Platform: "linux/amd64",
 		Subjects: []*builderv0.ImageSubject{{
-			Reference: "ghcr.io/codefly-dev/generic:0.0.35",
+			Reference: "ghcr.io/codefly-dev/other:0.0.35",
 			Role:      "runtime",
-			Service:   "generic",
+			Service:   "other",
 		}},
 		Bom:    &agentv0.Bom{Components: []*agentv0.Component{{}}},
 		Sha256: "0f1e2d3c4b5a",
@@ -88,7 +91,7 @@ func TestDeclaredNoImageStatusSatisfiesSharedCoverageContract(t *testing.T) {
 	if response.GetNoImageReason() != builderv0.NoImageReason_NO_IMAGE_REASON_NO_IMAGE {
 		t.Fatalf("no-image reason = %v, want NO_IMAGE", response.GetNoImageReason())
 	}
-	if err := sbom.ValidateCoverage(nil, response); err != nil {
+	if err := sbom.ValidateCoverage("generic", nil, response); err != nil {
 		t.Fatalf("declared no-image status fails shared coverage conformance: %v", err)
 	}
 }
@@ -120,14 +123,14 @@ func TestFalseImageCoverageClaimsAreRejected(t *testing.T) {
 		response *builderv0.SBOMResponse
 		want     string
 	}{
-		{name: "no reason", response: unspecified, want: "explicit reason"},
+		{name: "no reason", response: unspecified, want: "must declare a no-image reason"},
 		{name: "source inventory as image coverage", response: source, want: "not image coverage"},
-		{name: "images without a declared expectation", response: fabricated, want: "must declare a no-image reason"},
+		{name: "another service's image as coverage", response: fabricated, want: "names no subject belonging to generic"},
 		{name: "images under a no-image declaration", response: contradictory, want: "carries 1 inventories"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := sbom.ValidateCoverage(nil, test.response)
+			err := sbom.ValidateCoverage("generic", nil, test.response)
 			if err == nil {
 				t.Fatal("shared contract accepted a false image-coverage claim")
 			}
@@ -152,10 +155,11 @@ func TestAnyRegisteredBuilderServesConformantImageEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("image-scope SBOM: %v", err)
 	}
-	// Measured against no expected subjects, ValidateCoverage admits only a
-	// declared no-image response. A Builder that emits images must derive its
-	// subjects from the build it declares and assert coverage against those.
-	if err := sbom.ValidateCoverage(nil, response); err != nil {
+	// Measured against no expected subjects, ValidateCoverage admits a declared
+	// no-image response or digest-bound evidence the agent enumerates under its
+	// own name. A Builder that emits images owes one of the two, and neither is
+	// what the toolbox's no-image status answers with today.
+	if err := sbom.ValidateCoverage("generic", nil, response); err != nil {
 		t.Fatalf("registered Builder does not satisfy image coverage conformance: %v", err)
 	}
 }
