@@ -1,7 +1,7 @@
 publisher: codefly.dev
 kind: codefly:service
 name: generic
-version: 0.0.36
+version: 0.0.37
 release:
   owner: workflow
   workflow: releaser.yml
