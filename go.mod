@@ -1,6 +1,6 @@
 module github.com/codefly-dev/service-generic
 
-go 1.27.0
+go 1.27.2
 
 require (
 	github.com/codefly-dev/core v0.19.4
