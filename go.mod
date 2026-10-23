@@ -3,7 +3,7 @@ module github.com/codefly-dev/service-generic
 go 1.27.2
 
 require (
-	github.com/codefly-dev/core v0.19.4
+	github.com/codefly-dev/core v0.19.5
 	google.golang.org/grpc v1.84.0
 	gopkg.in/yaml.v3 v3.0.1
 )
