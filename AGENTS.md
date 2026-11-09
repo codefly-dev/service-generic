@@ -55,7 +55,7 @@ so the standing temptation is to reimplement locally what is missing upstream.
 ## Build and test
 
 Derived from `.github/workflows/ci.yml` (job `boundary`), which pins Go from
-`go.mod` (1.27.0) and runs with no network, no kubeconfig, and no cloud
+`go.mod`'s `go` directive and runs with no network, no kubeconfig, and no cloud
 credentials:
 
 ```bash
