@@ -61,7 +61,7 @@ credentials:
 ```bash
 go build ./...
 go vet ./...
-go test ./...      # boundary and conformance tests; ~0.05s, no external deps
+go test ./...      # boundary and conformance tests; well under a second, no external deps
 ```
 
 That is the entire gate — no linter, no coverage threshold, no build tags, no
